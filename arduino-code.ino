@@ -32,6 +32,11 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+#include <Wire.h>
+#include <SHT31.h>
+#include "AaadLPP.h"
+
+SHT31 sht;
 
 // LoRaWAN NwkSKey, network session key
 // This is the default Semtech key, which is used by the early prototype TTN
@@ -58,7 +63,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 60;
+const unsigned TX_INTERVAL = 20;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -138,8 +143,39 @@ void do_send(osjob_t* j){
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
-        // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
+        // SHT31 uitlezen
+        sht.read();
+        float temperature = sht.getTemperature();
+        float humidity = sht.getHumidity();
+
+        Serial.print(F("Temperature: "));
+        Serial.print(temperature, 1);
+        Serial.println(F(" C"));
+        Serial.print(F("Humidity: "));
+        Serial.print(humidity, 1);
+        Serial.println(F(" %"));
+
+        // AaadLPP payload: 4 bytes temperature + 3 bytes humidity
+        uint8_t txData[7];
+        uint8_t cursor = 0;
+
+        // Channel 1 - Temperature (type 103, signed 16-bit, x10)
+        txData[cursor++] = 1;
+        txData[cursor++] = LPP_TEMPERATURE;
+        int16_t tempValue = (int16_t)(temperature * 10.0f);
+        txData[cursor++] = (tempValue >> 8) & 0xFF;
+        txData[cursor++] = tempValue & 0xFF;
+
+        // Channel 2 - Relative Humidity (type 104, uint8, x2)
+        txData[cursor++] = 2;
+        txData[cursor++] = LPP_RELATIVE_HUMIDITY;
+        uint8_t humidityValue = (uint8_t)(humidity * 2.0f);
+        txData[cursor++] = humidityValue;
+
+        LMIC_setTxData2(1, txData, cursor, 0);
+        Serial.print(F("Payload size: "));
+        Serial.print(cursor);
+        Serial.println(F(" bytes"));
         Serial.println(F("Packet queued"));
     }
     // Next TX is scheduled after TX_COMPLETE event.
@@ -148,6 +184,23 @@ void do_send(osjob_t* j){
 void setup() {
     Serial.begin(115200);
     Serial.println(F("Starting"));
+
+    // SHT31 initialiseren
+    Wire.begin();
+    Wire.setClock(100000);
+    if (!sht.begin()) {
+        Serial.println(F("ERROR: SHT31 niet gevonden!"));
+        while (1) { delay(1000); }
+    }
+    Serial.println(F("SHT31 gevonden!"));
+    delay(100);
+    sht.read();
+    Serial.print(F("Test Temperature: "));
+    Serial.print(sht.getTemperature(), 1);
+    Serial.println(F(" C"));
+    Serial.print(F("Test Humidity: "));
+    Serial.print(sht.getHumidity(), 1);
+    Serial.println(F(" %"));
 
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
