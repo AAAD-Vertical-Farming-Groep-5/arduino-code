@@ -63,7 +63,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 20;
+const unsigned TX_INTERVAL = 600; // 10 minuten
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -139,15 +139,14 @@ void onEvent (ev_t ev) {
 }
 
 void do_send(osjob_t* j){
-    int bodemvocht = bodemvochtSensor.read();
-    uint8_t txData[4];
-    uint8_t cursor = 0;
-
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
+        uint8_t txData[4];
+        uint8_t cursor = 0;
+        int bodemvocht = bodemvochtSensor.read();
         // Data Channel 1 - Bodemvocht
         txData[cursor++] = 1;
         txData[cursor++] = LPP_ANALOG_OUTPUT;
