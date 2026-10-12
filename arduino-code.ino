@@ -32,11 +32,14 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
-
+#include <CayenneLPP.h>
 #include "AaadLPP.h"
+#include "BodemvochtSensor.h"
+#include "WatertemperatuurSensor.h"
 #include "SHT31Sensor.h"
 
-SHT31Sensor climateSensor;
+BodemvochtSensor bodemvochtSensor(A0);
+WatertemperatuurSensor watertemperatuurSensor(3);
 
 // LoRaWAN NwkSKey, network session key
 // This is the default Semtech key, which is used by the early prototype TTN
@@ -62,7 +65,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 20;
+const unsigned TX_INTERVAL = 10; // 10 minuten
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -185,12 +188,45 @@ void do_send(osjob_t* j) {
     Serial.println(F(" bytes"));
 
     Serial.println(F("Packet queued"));
+void do_send(osjob_t* j){
+    // Check if there is not a current TX/RX job running
+    if (LMIC.opmode & OP_TXRXPEND) {
+        Serial.println(F("OP_TXRXPEND, not sending"));
+    } else {
+        // Prepare upstream data transmission at the next possible time.
+        uint8_t txData[4];
+        uint8_t cursor = 0;
+        int bodemvocht = bodemvochtSensor.read();
+        float watertemperatuur = watertemperatuurSensor.read();
+
+        // Data Channel 1 - Bodemvocht
+        txData[cursor++] = 1;
+        txData[cursor++] = LPP_ANALOG_OUTPUT;
+        uint16_t value = bodemvocht * 100;
+        txData[cursor++] = value >> 8;
+        txData[cursor++] = value;
+
+        // Kanaal 2: watertemperatuur
+        if (watertemperatuur == -127.0) {
+            Serial.println(F("Watertemperatuur niet verstuurd: sensorfout."));
+            return;
+        }
+
+        int16_t temperatuurValue = (int16_t)(watertemperatuur * 100);
+
+        txData[cursor++] = 2;
+        txData[cursor++] = LPP_ANALOG_OUTPUT;
+        txData[cursor++] = (uint8_t)(temperatuurValue >> 8);
+        txData[cursor++] = (uint8_t)(temperatuurValue & 0xFF);
+
+        LMIC_setTxData2(1, txData, cursor, 0);
+        Serial.println(F("Packet queued"));
+    }
+    // Next TX is scheduled after TX_COMPLETE event.
 }
 
 void setup() {
     Serial.begin(115200);
-    Serial.println(F("Starting"));
-
     // SHT31 initialiseren
     if (!climateSensor.begin()) {
         Serial.println(F("ERROR: SHT31 niet gevonden!"));
@@ -205,7 +241,9 @@ void setup() {
     // Testmeting
     climateSensor.read();
     climateSensor.printMeasurements();
-
+    watertemperatuurSensor.begin();
+    Serial.println(F("Starting"));
+    
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
     pinMode(VCC_ENABLE, OUTPUT);
