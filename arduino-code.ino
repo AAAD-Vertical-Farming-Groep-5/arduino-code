@@ -32,6 +32,11 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+#include <CayenneLPP.h>
+#include "AaadLPP.h"
+#include "BodemvochtSensor.h"
+
+BodemvochtSensor bodemvochtSensor(A0);
 
 // LoRaWAN NwkSKey, network session key
 // This is the default Semtech key, which is used by the early prototype TTN
@@ -58,7 +63,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 60;
+const unsigned TX_INTERVAL = 600; // 10 minuten
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -139,7 +144,17 @@ void do_send(osjob_t* j){
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
+        uint8_t txData[4];
+        uint8_t cursor = 0;
+        int bodemvocht = bodemvochtSensor.read();
+        // Data Channel 1 - Bodemvocht
+        txData[cursor++] = 1;
+        txData[cursor++] = LPP_ANALOG_OUTPUT;
+        uint16_t value = bodemvocht * 100;
+        txData[cursor++] = value >> 8;
+        txData[cursor++] = value;
+
+        LMIC_setTxData2(1, txData, cursor, 0);
         Serial.println(F("Packet queued"));
     }
     // Next TX is scheduled after TX_COMPLETE event.
@@ -222,5 +237,6 @@ void setup() {
 }
 
 void loop() {
+    //bodemvochtSensor.read();
     os_runloop_once();
 }
