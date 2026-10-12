@@ -36,7 +36,7 @@
 #include "AaadLPP.h"
 #include "BodemvochtSensor.h"
 #include "WatertemperatuurSensor.h"
-
+#include "SHT31Sensor.h"
 
 BodemvochtSensor bodemvochtSensor(A0);
 WatertemperatuurSensor watertemperatuurSensor(3);
@@ -61,7 +61,6 @@ void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
-static uint8_t mydata[] = "Hello, world!";
 static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
@@ -141,6 +140,54 @@ void onEvent (ev_t ev) {
     }
 }
 
+void do_send(osjob_t* j) {
+
+    if (LMIC.opmode & OP_TXRXPEND) {
+        Serial.println(F("OP_TXRXPEND, not sending"));
+        return;
+    }
+
+    // Sensor object opdracht geven een meting uit te voeren
+    climateSensor.read();
+
+    float temperature = climateSensor.getTemperature();
+    float humidity = climateSensor.getHumidity();
+
+    climateSensor.printMeasurements();
+
+
+    // AaadLPP payload
+    uint8_t txData[7];
+    uint8_t cursor = 0;
+
+
+    // Channel 1 - Temperature
+    txData[cursor++] = 1;
+    txData[cursor++] = LPP_TEMPERATURE;
+
+    int16_t tempValue = (int16_t)(temperature * 10.0f);
+
+    txData[cursor++] = (tempValue >> 8) & 0xFF;
+    txData[cursor++] = tempValue & 0xFF;
+
+
+    // Channel 2 - Humidity
+    txData[cursor++] = 2;
+    txData[cursor++] = LPP_RELATIVE_HUMIDITY;
+
+    uint8_t humidityValue = (uint8_t)(humidity * 2.0f);
+
+    txData[cursor++] = humidityValue;
+
+
+    // Versturen naar TTN
+    LMIC_setTxData2(1, txData, cursor, 0);
+
+    Serial.print(F("Payload size: "));
+    Serial.print(cursor);
+    Serial.println(F(" bytes"));
+
+    Serial.println(F("Packet queued"));
 void do_send(osjob_t* j){
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
@@ -180,9 +227,23 @@ void do_send(osjob_t* j){
 
 void setup() {
     Serial.begin(115200);
+    // SHT31 initialiseren
+    if (!climateSensor.begin()) {
+        Serial.println(F("ERROR: SHT31 niet gevonden!"));
+
+        while (1) {
+            delay(1000);
+        }
+    }
+
+    Serial.println(F("SHT31 gevonden!"));
+
+    // Testmeting
+    climateSensor.read();
+    climateSensor.printMeasurements();
     watertemperatuurSensor.begin();
     Serial.println(F("Starting"));
-
+    
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
     pinMode(VCC_ENABLE, OUTPUT);
@@ -256,6 +317,5 @@ void setup() {
 }
 
 void loop() {
-    //bodemvochtSensor.read();
     os_runloop_once();
 }
