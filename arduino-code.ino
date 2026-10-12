@@ -35,8 +35,11 @@
 #include <CayenneLPP.h>
 #include "AaadLPP.h"
 #include "BodemvochtSensor.h"
+#include "WatertemperatuurSensor.h"
+
 
 BodemvochtSensor bodemvochtSensor(A0);
+WatertemperatuurSensor watertemperatuurSensor(3);
 
 // LoRaWAN NwkSKey, network session key
 // This is the default Semtech key, which is used by the early prototype TTN
@@ -63,7 +66,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 600; // 10 minuten
+const unsigned TX_INTERVAL = 10; // 10 minuten
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -147,12 +150,27 @@ void do_send(osjob_t* j){
         uint8_t txData[4];
         uint8_t cursor = 0;
         int bodemvocht = bodemvochtSensor.read();
+        float watertemperatuur = watertemperatuurSensor.read();
+
         // Data Channel 1 - Bodemvocht
         txData[cursor++] = 1;
         txData[cursor++] = LPP_ANALOG_OUTPUT;
         uint16_t value = bodemvocht * 100;
         txData[cursor++] = value >> 8;
         txData[cursor++] = value;
+
+        // Kanaal 2: watertemperatuur
+        if (watertemperatuur == -127.0) {
+            Serial.println(F("Watertemperatuur niet verstuurd: sensorfout."));
+            return;
+        }
+
+        int16_t temperatuurValue = (int16_t)(watertemperatuur * 100);
+
+        txData[cursor++] = 2;
+        txData[cursor++] = LPP_ANALOG_OUTPUT;
+        txData[cursor++] = (uint8_t)(temperatuurValue >> 8);
+        txData[cursor++] = (uint8_t)(temperatuurValue & 0xFF);
 
         LMIC_setTxData2(1, txData, cursor, 0);
         Serial.println(F("Packet queued"));
@@ -162,6 +180,7 @@ void do_send(osjob_t* j){
 
 void setup() {
     Serial.begin(115200);
+    watertemperatuurSensor.begin();
     Serial.println(F("Starting"));
 
     #ifdef VCC_ENABLE
