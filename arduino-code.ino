@@ -152,8 +152,8 @@ void do_send(osjob_t* j){
         uint8_t cursor = 0;
 
         int bodemvocht = bodemvochtSensor.read();
-        //float watertemperatuur = watertemperatuurSensor.read();
-        float watertemperatuur = 23.19;
+        float watertemperatuur = watertemperatuurSensor.read();
+        //float watertemperatuur = 23.19;
         sht31Sensor.read();
         float temperature = sht31Sensor.getTemperature();
         float humidity = sht31Sensor.getHumidity();
@@ -215,7 +215,7 @@ void setup() {
     sht31Sensor.read();
     sht31Sensor.printMeasurements();
 
-    //watertemperatuurSensor.begin();
+    watertemperatuurSensor.begin();
     Serial.println(F("Starting"));
     
     #ifdef VCC_ENABLE
