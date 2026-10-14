@@ -67,7 +67,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 10; // 10 minuten
+const unsigned TX_INTERVAL = 60; // 10 minuten
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -148,7 +148,7 @@ void do_send(osjob_t* j){
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        uint8_t txData[15];
+        uint8_t txData[19];
         uint8_t cursor = 0;
 
         int bodemvocht = bodemvochtSensor.read();
@@ -191,6 +191,13 @@ void do_send(osjob_t* j){
         uint16_t bodemvochtValue = bodemvocht * 100;
         txData[cursor++] = bodemvochtValue >> 8;
         txData[cursor++] = bodemvochtValue;
+
+        // Data Channel 5 - Lichtintensiteit
+        txData[cursor++] = 5;
+        txData[cursor++] = LPP_ANALOG_OUTPUT;
+        uint16_t lichtintensiteitValue = 450;
+        txData[cursor++] = (lichtintensiteitValue >> 8) & 0xFF;
+        txData[cursor++] = lichtintensiteitValue & 0xFF;
 
         Serial.print(F("Payloadlengte: "));
         Serial.println(cursor);
